@@ -7,6 +7,8 @@ Differences:
 start flags change depending on the message sent.
 end flags is now a checksum.
 
+warning: make sure to update the start flags
+
 ... let's hope for the best
 
 */
@@ -145,9 +147,3 @@ void getMsg(BT_msg *m){
     }
 }
 
-void sendCmd(BT_msg *m, uint8_t *cmd, uint8_t size){
-    // add here the funcitons sedning the cmd through uart.
-    
-    // now update the second start flag so you detect the response
-    m->secondStartFlag = cmd[1] | 0x40;
-}

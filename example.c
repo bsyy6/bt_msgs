@@ -17,7 +17,6 @@ volatile Buffer msgsIdx; // message index object
 uint8_t msgs_buffer = 0;
 uint8_t U1RXREG[14] = {0x02, 0x50, 0x07, 0x00, 0x00, 0x55, 0x00, 0x00, 0xDA, 0x18, 0x00, 0xC2} ; 
 
-//uint8_t U1RXREG[6] = { 161, 162, 6, 241, 162, 161}; // correct
 
 uint8_t dataPoint = 0xA; // RXREG
 
