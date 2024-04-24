@@ -144,3 +144,10 @@ void getMsg(BT_msg *m){
         m->msgsAvailable--;
     }
 }
+
+void sendCmd(BT_msg *m, uint8_t *cmd, uint8_t size){
+    // add here the funcitons sedning the cmd through uart.
+    
+    // now update the second start flag so you detect the response
+    m->secondStartFlag = cmd[1] | 0x40;
+}
