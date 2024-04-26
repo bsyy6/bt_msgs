@@ -2,6 +2,8 @@
 #include "bt_msgs.h"
 #include "buffers.h"
 
+uint8_t const ACTION_IDLE[6] =  {0x41, 0x02, 0x00, 0x01, 0x01, 0x41};
+
 
 uint8_t msgData[20];
 uint8_t raw_buffer[12];
@@ -30,10 +32,10 @@ int main() {
     msgsIdx = initBuffer(msgs_idxs,sizeof(msgs_idxs[0]),sizeof(msgs_idxs)/sizeof(msgs_idxs[0]));
 
     //[3] start message object
-    BT_msg M = initMsg(&messageBuffer,&rawBuffer,&msgsIdx,&msgOutput);
+    BT_msg M = init_BT_Msg(&messageBuffer,&rawBuffer,&msgsIdx,&msgOutput);
 
-    M.firstStartFlag = 0x02;
-    M.secondStartFlag = 0x50;
+    M.BT_firstStartFlag = 0x02;
+    M.BT_secondStartFlag = 0x50;
 
     //[4] new data comes to raw buffer
     int i =0;
@@ -44,11 +46,11 @@ int main() {
             enq(&U1RXREG[i-3],&rawBuffer);
             enq(&U1RXREG[i-2],&rawBuffer);
             enq(&U1RXREG[i-1],&rawBuffer);
-            processMsg(&M);
+            process_BT_Msg(&M);
         }
     }
     
-    getMsg(&M);
-    getMsg(&M);
+    get_BT_Msg(&M);
+    get_BT_Msg(&M);
     return 0;
 }

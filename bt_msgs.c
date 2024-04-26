@@ -16,106 +16,114 @@ warning: make sure to update the start flags
 #include "bt_msgs.h"
 #include "buffers.h"
 
-BT_msg initMsg( volatile Buffer *msgs_buffer, volatile Buffer *raw_buffer, volatile Buffer *msgs_idxs, void *msgData){
+BT_msg init_BT_Msg( volatile Buffer *msgs_buffer, volatile Buffer *raw_buffer, volatile Buffer *msgs_idxs, void *BT_msgData){
     BT_msg M;
-    M.rawBuffer = raw_buffer;
-    M.msgQueue = msgs_buffer;
-    M.msgIdx = msgs_idxs;
+    M.BT_rawBuffer = raw_buffer;
+    M.BT_msgQueue = msgs_buffer;
+    M.BT_msgIdx = msgs_idxs;
     // where it outputs the message
-    M.msgData = msgData;
-    M.msgDataSize = 0;
+    M.BT_msgData = BT_msgData;
+    M.BT_msgDataSize = 0;
+    M.BT_msgsAvailable = 0;
+
     //
-    M.state = START1;
-    M.msgSize = 0;
-    M.msgsAvailable = 0;
-    M.byte = 0;
-    M.prevByte = 0;
-    M.state = START1;
-    M.prevState = START1;
-    M.size = 0;
-    M.partCount = 0;
+    M.BT_state = BT_START1;
+    M.BT_msgBytes = 0;
+    M.BT_msgBytesLeft = 0;
+    M.BT_byte = 0;
+    M.BT_prevByte = 0;
+    M.BT_state = BT_START1;
+    M.BT_prevState = BT_START1;
 
     // set the start flags
-    M.firstStartFlag = 0x02;
-    M.secondStartFlag = 0x00; // updates based on message sent and expeceted response -> command | 0x40
-    M.endFlag = 0x00;         // is the checksum of the whole package sent
+    M.BT_firstStartFlag = 0x02;
+    M.BT_secondStartFlag = 0x00; // updates based on message sent and expeceted response -> command | 0x40
+    M.BT_endFlag = 0x00;         // is the checksum of the whole package sent
     return M;
 }
 
 
-void processMsg(BT_msg *m){
-    if(m->rawBuffer->isEmpty){
+void process_BT_Msg(BT_msg *m){
+    if(m->BT_rawBuffer->isEmpty){
         return;
     }
     // update history
-    m->prevByte  = m->byte;
-    m->prevState = m->state;
-    while(!m->rawBuffer->isEmpty){
-        deq(&m->byte,m->rawBuffer);
-        switch (m->state){
-            case START1:
-                if(m->byte == m->firstStartFlag){
-                    m->state = START2;
-                    m->msgSize = 0;
-                    setBookmark(m->rawBuffer);
+    m->BT_prevByte  = m->BT_byte;
+    m->BT_prevState = m->BT_state;
+    while(!m->BT_rawBuffer->isEmpty){
+        deq(&m->BT_byte,m->BT_rawBuffer);
+        switch (m->BT_state){
+            case BT_START1:
+                if(m->BT_byte == m->BT_firstStartFlag){
+                    m->BT_state = BT_START2;
+                    m->BT_msgBytes = 0;
+                    setBookmark(m->BT_rawBuffer);
                 }
                 break;
-            case START2:
-                if(m->byte == m->secondStartFlag){
-                    m->state = SIZE1;
+            case BT_START2:
+                if(m->BT_byte == m->BT_secondStartFlag){
+                    m->BT_state = BT_SIZE1;
                 }else{
-                    m->state = ERROR;
+                    m->BT_state = BT_ERROR;
                 }
                 break;
-            case SIZE1:
+            case BT_SIZE1:
                 // LSB
-                m->msgSize = m->byte;
-                m->state = SIZE2; // wait for msb
+                m->BT_msgBytes = m->BT_byte;
+                m->BT_state = BT_SIZE2; // wait for msb
                 break;
-            case SIZE2:
+            case BT_SIZE2:
                 // MSB
-                m->msgSize |= m->byte<<8;
-                m->partCount = m->msgSize;
-                if(m->msgSize > BT_MAX_MSG_SIZE || m->msgSize < BT_MIN_MSG_SIZE){
-                    m->state = ERROR;
+                m->BT_msgBytes |= m->BT_byte<<8;
+                if(m->BT_msgBytes > BT_MAX_MSG_SIZE || m->BT_msgBytes < BT_MIN_MSG_SIZE){
+                    m->BT_msgBytes = 0;
+                    m->BT_state = BT_ERROR;
                 }else{
-                    m->state = DATA;
+                    m->BT_state = BT_DATA;
+                    m->BT_msgBytesLeft = m->BT_msgBytes;
                 }
                 break;
-            case DATA:
+            case BT_DATA:
                 // payload
-                enq(&m->byte,m->msgQueue); 
-                m->msgSize = m->msgSize-1; 
-                if(m->msgSize == 0){
-                    m->state = CS;
-                    jumpToBookmark(m->rawBuffer);
-                    // move the tail one byte behind
-                    m->rawBuffer->tail = (m->rawBuffer->tail - 1) % m->rawBuffer->arraySize;
-                    m->endFlag = calcCS_buffer(m->rawBuffer,m->partCount+4); // payload + 2 start flag bytes + 2 size bytes
+                enq(&m->BT_byte,m->BT_msgQueue); 
+                m->BT_msgBytesLeft = m->BT_msgBytesLeft-1; 
+                if(m->BT_msgBytesLeft == 0){
+                    m->BT_state = BT_CS;
+                    jumpToBookmark(m->BT_rawBuffer);
+                    // move the tail one BT_byte behind
+                    m->BT_rawBuffer->tail = (m->BT_rawBuffer->tail - 1) % m->BT_rawBuffer->arraySize;
+                    m->BT_endFlag = calcCS_buffer(m->BT_rawBuffer,m->BT_msgBytes+4); //  2 start flag bytes + 2 size bytes+ bytes of payload 
                 }
                 break;
-            case CS:
-                if(m->byte == m->endFlag){
-                    m->msgsAvailable++;
-                    removeBookmark(m->rawBuffer);
-                    m->state = START1;
+            case BT_CS:
+                if(m->BT_byte == m->BT_endFlag){
+                    m->BT_msgsAvailable++;
+                    enq(&m->BT_msgBytes,m->BT_msgIdx);
+                    removeBookmark(m->BT_rawBuffer);
+                    m->BT_state = BT_START1;
                 }else{
-                    m->state = ERROR;
+                    m->BT_state = BT_ERROR;
                 }
                 break;      
-            case ERROR:
-                if(findNextBookmark(m->rawBuffer)){
-                    m->state = START2;
-                    m->prevState = START1;
-                    m->byte = m->firstStartFlag;
-                    jumpToBookmark(m->rawBuffer);
+            case BT_ERROR:
+
+                if(m->BT_prevState > 2){
+                    // clear wrong data 
+                    rollback(m->BT_msgIdx, 1);
+                    rollback(m->BT_msgQueue, (m->BT_msgBytes- m->BT_msgBytesLeft) );
+                }
+
+                if(findNextBookmark(m->BT_rawBuffer)){
+                    m->BT_state = BT_START2;
+                    m->BT_prevState = BT_START1;
+                    m->BT_byte = m->BT_firstStartFlag;
+                    jumpToBookmark(m->BT_rawBuffer);
                 }else{
-                    removeBookmark(m->rawBuffer);
+                    removeBookmark(m->BT_rawBuffer);
+                    m->BT_prevState = BT_START1;
+                    m->BT_state = BT_START1;
                 }
-                if(m->msgSize != 0){ // clear the last two data points in msgIdx
-                    rollback(m->msgIdx ,1);
-                    rollback(m->msgQueue,m->partCount);
-                }
+                
                 break;
         }   
     }
@@ -130,7 +138,7 @@ uint8_t calcCS_buffer(Buffer* buffer, uint8_t size){
     }
     
     uint8_t cs = 0;
-    uint8_t b = 0; // a temporary byte
+    uint8_t b = 0; // a temporary BT_byte
     for(uint8_t i = 0; i < size; i++){
         deq(&b, buffer);
         cs^=b;
@@ -138,12 +146,20 @@ uint8_t calcCS_buffer(Buffer* buffer, uint8_t size){
     return cs;
 }
 
+uint8_t getChecksum(uint8_t* arr, uint8_t n){
+    uint8_t checksum = 0;
+    for (uint8_t i = 0; i < n; i++) {
+        checksum ^= arr[i];
+    }
+    return(checksum);
+}
 
-void getMsg(BT_msg *m){
-    if(m->msgsAvailable > 0){
-        deq(&(m->msgDataSize), m->msgIdx);
-        nDeq(m->msgData,m->msgQueue,m->msgDataSize);
-        m->msgsAvailable--;
+
+void get_BT_Msg(BT_msg *m){
+    if(m->BT_msgsAvailable > 0){
+        deq(&(m->BT_msgDataSize), m->BT_msgIdx);
+        nDeq(m->BT_msgData,m->BT_msgQueue,m->BT_msgDataSize);
+        m->BT_msgsAvailable--;
     }
 }
 
